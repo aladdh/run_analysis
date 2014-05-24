@@ -1,7 +1,9 @@
 # This script reads training and test data from TXT files and
 # writes the results to an output TXT file.
 #
-# A number of assu,mptions hold.
+# Note that this requires the reshape package
+#
+# A number of assumptions hold.
 # 1. All input files reside in the working directory.
 # 2. The input files are...
 #		activity_labels.txt		numeric and text mappings
@@ -12,7 +14,7 @@
 #		subject_test.txt		list of subject IDs for test records
 #		y_test.txt				list of activity codes for test records
 #		X_test.txt				rows of test data for test records
-# 3. Output is written to a CSV-format file named Samsung_data.txt
+# 3. Output is written to a tab separated format file named Samsung_data.txt
 # See the README.md file for more details
 
 # read the set of activity codes for mapping codes to text later
@@ -30,13 +32,11 @@ dataColsSubset <- grepl("mean()|std()", feats$featName, ignore.case=FALSE)
 
 # read the set of people for each record and assign a descriptive name
 personColTrain <- read.table("subject_train.txt")
-names(personColTrain) <- c("subject-ID")
+names(personColTrain) <- c("subjectID")
 
 # read the activity codes for each record and...
 activityColTrain <- read.table("y_train.txt")
-names(activityColTrain) <- c("actCode")
-# ...convert to a descriptive text using activity labels read earlier
-activityColTrain <- merge(activityColTrain, acts, by="actCode")
+names(activityColTrain) <- c("actCode") 
 
 # read the full set of features, one per column, for each test
 dataColsAllTrain <- read.table("X_train.txt")
@@ -45,7 +45,8 @@ names(dataColsAllTrain) <- feats$featName
 dataColsTrain <- dataColsAllTrain[,dataColsSubset]
 
 # bind all these columns for each test together
-dfTrain <- cbind(personColTrain, activityColTrain$activity, dataColsTrain)
+dfTrain <- cbind(personColTrain, activityColTrain, dataColsTrain)
+names(dfTrain)[1] <- "subjectID"
 names(dfTrain)[2] <- "activity"
 
 
@@ -53,13 +54,11 @@ names(dfTrain)[2] <- "activity"
 
 # read the set of people for each record and assign a descriptive name
 personColTest <- read.table("subject_test.txt")
-names(personColTest) <- c("subject-ID")
+names(personColTest) <- c("subjectID")
 
 # read the activity codes for each record and...
 activityColTest <- read.table("y_test.txt")
 names(activityColTest) <- c("actCode")
-# ...convert to a descriptive text using activity labels read earlier
-activityColTest <- merge(activityColTest, acts, by="actCode")
 
 # read the full set of features, one per column, for each test
 dataColsAllTest <- read.table("X_test.txt")
@@ -68,7 +67,8 @@ names(dataColsAllTest) <- feats$featName
 dataColsTest <- dataColsAllTest[,dataColsSubset]
 
 # bind all these columns for each test together
-dfTest <- cbind(personColTest, activityColTest$activity, dataColsTest)
+dfTest <- cbind(personColTest, activityColTest, dataColsTest)
+names(dfTest)[1] <- "subjectID"
 names(dfTest)[2] <- "activity"
 
 
@@ -78,4 +78,23 @@ df <- rbind(dfTrain, dfTest)
 
 # CREATE SUMMARY DATA BY AVERAGING ALL VALUES OVER EACH PERSON-ACTIVITY PAIR
 
-write.csv(df, file="Samsung_data.txt")
+# needs reshape package
+package_name = "reshape"
+is_installed <- function(mypkg) {
+	is.element(mypkg, installed.packages()[,1])
+}
+if (!is_installed(package_name)) {
+	install.packages(package_name, repos="http://lib.stat.cmu.edu/R/CRAN")
+}
+library(package_name, character.only=TRUE, quietly=TRUE, verbose=FALSE)
+
+df1 <- melt(df, id=c("subjectID", "activity"))
+df2 <- cast(df1, ... ~ variable, mean)
+
+# ...convert to a descriptive text using activity labels read earlier
+map <- setNames(acts$activity, acts$actCode)
+df3 <- cbind("subjectID"=df2[,1],
+			 "activity"=apply(df2[,1:2], 2, function(x) map[as.character(x)])[,2],
+			 df2[,-1:-2])
+
+write.table(df3, file="Samsung_data.txt", sep='\t', row.names=FALSE)
